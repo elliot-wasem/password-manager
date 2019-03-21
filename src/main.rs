@@ -255,12 +255,17 @@ fn store_to_file(store: Option<Vec<Store>>, key: &str, saved_pass: &str, filenam
 fn keys_to_string(store: Option<Vec<Store>>) -> Option<String> {
     match store {
         Some(s) => {
+            let mut keys: Vec<String> = Vec::new();
             let mut result = String::new();
-            for x in s {
+            for x in s.clone() {
+                keys.push(x.key.clone());
+            }
+            keys.sort();
+            for x in keys {
                 if result == "" {
-                    result = format!("{}", x.key.clone());
+                    result = format!("{}", x.clone());
                 } else {
-                    result = format!("{}\n{}", result, x.key.clone());
+                    result = format!("{}\n{}", result, x.clone());
                 }
             }
             Some(result)
@@ -358,9 +363,11 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &keys);
+                        let account = prompt("Account:", &format!("..\n{}", keys));
                         if account == "" {
                             return;
+                        } else if account == ".." {
+                            continue;
                         }
                         /* get password of given account */
                         let pass = get_pass(store, account);
@@ -388,10 +395,18 @@ fn main() {
                 if pass == "" {
                     return;
                 }
+                let areyousure = prompt("AddAccount?", "No\nYes");
+                if areyousure == "" {
+                    return;
+                } else if areyousure == "No" {
+                    prompt("AccountNotAdded.", "Ok");
+                    continue;
+                }
                 /* reset pass for account */
                 store = add_pair(store, account, pass);
                 /* stores new store to file */
                 store_to_file(store, &key, &saved_pass, &filename);
+                prompt("AccountAdded.", "Ok");
                 continue;
             },
             "Change" => {
@@ -402,9 +417,11 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &keys);
+                        let account = prompt("Account:", &format!("..\n{}", &keys));
                         if account == "" {
                             return;
+                        } else if account == ".." {
+                            continue;
                         }
                         /* get password of given account */
                         let pass = prompt("NewPass:", "");
@@ -439,9 +456,11 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &keys);
+                        let account = prompt("Account:", &format!("..\n{}",&keys));
                         if account == "" {
                             return;
+                        } else if account == ".." {
+                            continue;
                         }
                         let areyousure = prompt("AreYouSure???", "No\nYes");
                         if areyousure == "" {
