@@ -58,3 +58,6 @@ Some menus have `..` as an option. This just returns you to the previous menu wi
 
 
 Hitting `ESC` at any time will cancel any changes pending, and will leave the file in the last state, fully exiting the program.
+
+
+Entering an invalid master password will just crash the program. Essentially, it tries to use the bad password to decode the file, resulting in it reaching unpredictable behavior and panicking.
