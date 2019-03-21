@@ -56,10 +56,6 @@ fn read_from_file(filename: &str) -> std::io::Result<Vec<u8>> {
     Ok(input_buffer)
 }
 
-// fn vec_to_string(buf: Vec<u8>) -> String {
-//     buf.iter().fold(String::new(), |old: String, new: &u8| format!("{}{}", old, *new as char))
-// }
-
 fn retrieve_saved_gen(key: &str, buf: Vec<u8>) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     let mut sha_key = hash256(key);
@@ -94,17 +90,6 @@ fn store_string(key: &[u8], val: &[u8], mut buf: Vec<u8>) -> Vec<u8>{
     }
     buf
 }
-
-// fn encrypt_string(input: &str, sha_key: &str) -> Vec<u8> {
-//     let padded_input: String = format!("{}{}", input, "QQQ");
-//     let mut output: Vec<u8> = Vec::new();
-//     let input_bytes = padded_input.as_bytes();
-//     let sha_key_bytes = sha_key.as_bytes();
-//     for i in 0..padded_input.len() {
-//         output.push(input_bytes[i]^sha_key_bytes[i]);
-//     }
-//     output
-// }
 
 fn encrypt_string_gen(input: &str, key: &str) -> Vec<u8> {
     let mut sha_key: String = hash256(key);
@@ -327,7 +312,7 @@ fn main() {
 
     /* check number of arguments */
     if args.len() != 2 {
-        println!("\nUsage: ./password-manager <filename>\n\n\taction: [ select | add | change | delete | debug | reset | change master password ]\n");
+        println!("\nUsage: ./password-manager <filename>\n\n\taction: [ select | add | change | delete | purge file | change master password ]\n");
         return;
     }
 
@@ -339,169 +324,167 @@ fn main() {
     if key == "" {
         return;
     }
-    let action: String = prompt("Action:", "Select\nAdd\nChange\nDelete\nDebug\nReset\nChange Master Password");
-    if action == "" {
-        return;
-    }
+    let mut action: String = String::new();
 
-    /* debug print */
-    //println!("key: {}\nfilename: {}\naction: {}\n", key, filename, action);
+    while action != "Exit" {
+        action = prompt("Action:", "Select\nAdd\nChange\nDelete\nPurge File\nChange Master Password\nExit");
+        if action == "" {
+            return;
+        }
+        match &action[..] {
+            "Purge File" => {
+                let areyousure = prompt("AreYouSure???", "No\nYes");
+                if areyousure == "" {
+                    return;
+                } else if areyousure == "No" {
+                    prompt("FileNotPurged.", "Ok");
+                    continue;
+                }
+                /* gets random vector of bytes of length FILESIZE */
+                let mut buf: Vec<u8> = get_obfusc_buf_u8(FILESIZE);
+                let reset_input = format!("%{}", hash256(&key));
+                
+                /* writes buf to file */
+                buf = store_string(key.as_bytes(), reset_input.as_bytes(), buf);
+                write_to_file(&filename, buf).unwrap();
+                prompt("FilePurged.", "Ok");
+                return;
+            },
+            "Select" => {
+                /* get store */
+                let (store, _) = open_and_read(&key, &filename);
+                /* grab accounts from store */
+                let accts = keys_to_string(store.clone());
+                match accts {
+                    Some(keys) => {
+                        /* prompt for which account to use */
+                        let account = prompt("Account:", &keys);
+                        if account == "" {
+                            return;
+                        }
+                        /* get password of given account */
+                        let pass = get_pass(store, account);
 
-    match &action[..] {
-        "Debug" => {
-            /* debug string */
-            let debug_input = format!("Facebook:asdfasdfsadfasdf,Google:qwerqewrqwerqwer,Amazon:xzvxzcvzxcvzxcv%{}", hash256(&key));
-            /* gets random vector of bytes of length FILESIZE */
-            let mut buf: Vec<u8> = get_obfusc_buf_u8(FILESIZE);
+                        /* copy the password to clipboard */
+                        add_to_xclip(pass);
+                        continue;
+                    },
+                    None => {
+                        prompt("NoAccountsFound!", "Ok");
+                        continue;
+                    }
+                }
+            },
+            "Add" => {
+                /* get store */
+                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                /* prompt for which account to use */
+                let account = prompt("NewAccount:", "");
+                if account == "" {
+                    continue;
+                }
+                /* get password of given account */
+                let pass = prompt("NewPass:", "");
+                if pass == "" {
+                    return;
+                }
+                /* reset pass for account */
+                store = add_pair(store, account, pass);
+                /* stores new store to file */
+                store_to_file(store, &key, &saved_pass, &filename);
+                continue;
+            },
+            "Change" => {
+                /* get store */
+                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                /* grab accounts from store */
+                let accts = keys_to_string(store.clone());
+                match accts {
+                    Some(keys) => {
+                        /* prompt for which account to use */
+                        let account = prompt("Account:", &keys);
+                        if account == "" {
+                            return;
+                        }
+                        /* get password of given account */
+                        let pass = prompt("NewPass:", "");
+                        if pass == "" {
+                            return;
+                        }
+                        let areyousure = prompt("AreYouSure???", "No\nYes");
+                        if areyousure == "" {
+                            return;
+                        } else if areyousure == "No" {
+                            prompt("PasswordUnchanged!", "Ok");
+                            continue;
+                        }
+                        /* reset pass for account */
+                        store = change_pair(store, account, pass);
+                        /* stores new store to file */
+                        store_to_file(store, &key, &saved_pass, &filename);
+                        prompt("PasswordChanged!", "Ok");
+                        continue;
+                    },
+                    None => {
+                        prompt("NoAccountsFound!", "Ok");
+                        continue;
+                    }
+                }
+            },
+            "Delete" => {
+                /* get store */
+                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                /* grab accounts from store */
+                let accts = keys_to_string(store.clone());
+                match accts {
+                    Some(keys) => {
+                        /* prompt for which account to use */
+                        let account = prompt("Account:", &keys);
+                        if account == "" {
+                            return;
+                        }
+                        let areyousure = prompt("AreYouSure???", "No\nYes");
+                        if areyousure == "" {
+                            return;
+                        }
+                        if areyousure == "No" {
+                            prompt("PasswordNotDeleted!", "Ok");
+                            continue;
+                        }
+                        /* reset pass for account */
+                        store = delete_pair(store, account);
+                        /* stores new store to file */
+                        store_to_file(store, &key, &saved_pass, &filename);
+                        prompt("PasswordDeleted!", "Ok");
+                        continue;
+                    },
+                    None => {
+                        prompt("NoAccountsFound!", "Ok");
+                        continue;
+                    }
+                }
+            },
+            "Change Master Password" => {
+                let (store, _) = open_and_read(&key, &filename);
+                key = prompt("NewMasterPass:", "");
+                if key == "" {
+                    return;
+                }
+                let areyousure = prompt("AreYouSure???", "No\nYes");
+                if areyousure == "No" {
+                    prompt("PasswordUnchanged!", "Ok");
+                    continue;
+                }
+
+                let saved_pass = hash256(&key);
+                store_to_file(store, &key, &saved_pass, &filename);
+                prompt("PasswordChanged!", "Ok");
+                return;
+            },
+            _ => {
+
+            }
             
-            /* writes buf to file */
-            buf = store_string(key.as_bytes(), debug_input.as_bytes(), buf);
-            write_to_file(&filename, buf).unwrap();
-            return;
-        },
-        "Reset" => {
-            /* gets random vector of bytes of length FILESIZE */
-            let mut buf: Vec<u8> = get_obfusc_buf_u8(FILESIZE);
-            let reset_input = format!("%{}", hash256(&key));
-            
-            /* writes buf to file */
-            buf = store_string(key.as_bytes(), reset_input.as_bytes(), buf);
-            write_to_file(&filename, buf).unwrap();
-            return;
-        },
-        "Select" => {
-            /* get store */
-            let (store, _) = open_and_read(&key, &filename);
-            /* grab accounts from store */
-            let accts = keys_to_string(store.clone());
-            match accts {
-                Some(keys) => {
-                    /* prompt for which account to use */
-                    let account = prompt("Account:", &keys);
-                    if account == "" {
-                        return;
-                    }
-                    /* get password of given account */
-                    let pass = get_pass(store, account);
-                    /* print for debug purposes, later copy to xclip */
-                    //println!("Select::Password: {}", pass);
-                    add_to_xclip(pass);
-                    return;
-                },
-                None => {
-                    prompt("NoAccountsFound!", "Ok");
-                    return;
-                }
-            }
-        },
-        "Add" => {
-            /* get store */
-            let (mut store, saved_pass) = open_and_read(&key, &filename);
-            /* prompt for which account to use */
-            let account = prompt("NewAccount:", "");
-            if account == "" {
-                return;
-            }
-            /* get password of given account */
-            let pass = prompt("NewPass:", "");
-            if pass == "" {
-                return;
-            }
-            /* print for debug purposes, later copy to xclip */
-            //println!("NewAccount: {}\nNewPass: {}", account, pass);
-            /* reset pass for account */
-            store = add_pair(store, account, pass);
-            //println!("Add::store: {:?}", store);
-            /* stores new store to file */
-            store_to_file(store, &key, &saved_pass, &filename);
-            return;
-        },
-        "Change" => {
-            /* get store */
-            let (mut store, saved_pass) = open_and_read(&key, &filename);
-            /* grab accounts from store */
-            let accts = keys_to_string(store.clone());
-            match accts {
-                Some(keys) => {
-                    /* prompt for which account to use */
-                    let account = prompt("Account:", &keys);
-                    if account == "" {
-                        return;
-                    }
-                    /* get password of given account */
-                    let pass = prompt("NewPass:", "");
-                    if pass == "" {
-                        return;
-                    }
-                    let areyousure = prompt("AreYouSure???", "No\nYes");
-                    if areyousure == "No" {
-                        prompt("PasswordUnchanged!", "Ok");
-                        return;
-                    }
-                    /* print for debug purposes, later copy to xclip */
-                    //println!("Select::Password: {}", pass);
-                    /* reset pass for account */
-                    store = change_pair(store, account, pass);
-                    /* stores new store to file */
-                    store_to_file(store, &key, &saved_pass, &filename);
-                    prompt("PasswordChanged!", "Ok");
-                    return;
-                },
-                None => {
-                    prompt("NoAccountsFound!", "Ok");
-                    return;
-                }
-            }
-        },
-        "Delete" => {
-            /* get store */
-            let (mut store, saved_pass) = open_and_read(&key, &filename);
-            /* grab accounts from store */
-            let accts = keys_to_string(store.clone());
-            match accts {
-                Some(keys) => {
-                    /* prompt for which account to use */
-                    let account = prompt("Account:", &keys);
-                    if account == "" {
-                        return;
-                    }
-                    let areyousure = prompt("AreYouSure???", "No\nYes");
-                    if areyousure == "No" {
-                        prompt("PasswordNotDeleted!", "Ok");
-                        return;
-                    }
-                    /* reset pass for account */
-                    store = delete_pair(store, account);
-                    /* stores new store to file */
-                    store_to_file(store, &key, &saved_pass, &filename);
-                    prompt("PasswordDeleted!", "Ok");
-                    return;
-                },
-                None => {
-                    prompt("NoAccountsFound!", "Ok");
-                    return;
-                }
-            }
-        },
-        "Change Master Password" => {
-            let (store, _) = open_and_read(&key, &filename);
-            key = prompt("NewMasterPass:", "");
-            if key == "" {
-                return;
-            }
-            let areyousure = prompt("AreYouSure???", "No\nYes");
-            if areyousure == "No" {
-                prompt("PasswordUnchanged!", "Ok");
-                return;
-            }
-
-            let saved_pass = hash256(&key);
-            store_to_file(store, &key, &saved_pass, &filename);
-            prompt("PasswordChanged!", "Ok");
-            return;
-        },
-        _ => {
-
         }
     }
 }
