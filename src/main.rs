@@ -288,10 +288,14 @@ fn get_pass(input: Option<Vec<Store>>, k: String) -> String {
     }
 }
 
-fn prompt(prompt: &str, input: &str) -> String {
+fn prompt(prompt: &str, input: &str, dmenu_wrapper: Option<String>) -> String {
+    let wrapper = match dmenu_wrapper {
+        Some(d_wrapper) => format!("sh {}", d_wrapper),
+        None => "/usr/bin/dmenu".to_string()
+    };
     let output = Command::new("sh")
         .arg("-c")
-        .arg(format!("echo -e '{}' | sh /home/winterstorm/bin/dmenu-wrapper.sh -p '{}'", input, prompt))
+        .arg(format!("echo -e '{}' | {} -p '{}'", input, wrapper, prompt))
         .output()
         .expect("failed to execute process");
     let mut result: String = str::from_utf8(&output.stdout).unwrap().to_string();
@@ -316,33 +320,42 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     /* check number of arguments */
-    if args.len() != 2 {
-        println!("\nUsage: ./password-manager <filename>\n\n\taction: [ select | add | change | delete | purge file | change master password ]\n");
+    if args.len() != 2 && args.len() != 3  {
+        println!("\nUsage: ./password-manager <filename> [<dmenu-wrapper>]\n\n\taction: [ select | add | change | delete | purge file | change master password ]\n");
         return;
     }
 
     /* grab the filename */
     let filename: String = args[1].clone();
 
+    let dmenu_wrapper: Option<String>;
+
+    if args.len() < 3 {
+        dmenu_wrapper = None;
+    } else {
+        dmenu_wrapper = Some(args[2].clone());
+    }
+
     /* prompt for master password, then the action */
-    let mut key: String = prompt("MasterPass:", "");
+    let mut key: String = prompt("MasterPass:", "", dmenu_wrapper.clone());
+
     if key == "" {
         return;
     }
     let mut action: String = String::new();
 
     while action != "Exit" {
-        action = prompt("Action:", "Select\nAdd\nChange\nDelete\nPurge File\nChange Master Password\nExit");
+                action = prompt("Action:", "Select\nAdd\nChange\nDelete\nPurge File\nChange Master Password\nExit", dmenu_wrapper.clone());
         if action == "" {
             return;
         }
         match &action[..] {
             "Purge File" => {
-                let areyousure = prompt("AreYouSure???", "No\nYes");
+                let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
                 if areyousure == "" {
                     return;
                 } else if areyousure == "No" {
-                    prompt("FileNotPurged.", "Ok");
+                    prompt("FileNotPurged.", "Ok", dmenu_wrapper.clone());
                     continue;
                 }
                 /* gets random vector of bytes of length FILESIZE */
@@ -352,7 +365,7 @@ fn main() {
                 /* writes buf to file */
                 buf = store_string(key.as_bytes(), reset_input.as_bytes(), buf);
                 write_to_file(&filename, buf).unwrap();
-                prompt("FilePurged.", "Ok");
+                prompt("FilePurged.", "Ok", dmenu_wrapper.clone());
                 return;
             },
             "Select" => {
@@ -363,7 +376,7 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}", keys));
+                        let account = prompt("Account:", &format!("..\n{}", keys), dmenu_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
@@ -377,7 +390,7 @@ fn main() {
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok");
+                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
                         continue;
                     }
                 }
@@ -386,27 +399,27 @@ fn main() {
                 /* get store */
                 let (mut store, saved_pass) = open_and_read(&key, &filename);
                 /* prompt for which account to use */
-                let account = prompt("NewAccount:", "");
+                let account = prompt("NewAccount:", "", dmenu_wrapper.clone());
                 if account == "" {
                     continue;
                 }
                 /* get password of given account */
-                let pass = prompt("NewPass:", "");
+                let pass = prompt("NewPass:", "", dmenu_wrapper.clone());
                 if pass == "" {
                     return;
                 }
-                let areyousure = prompt("AddAccount?", "No\nYes");
+                let areyousure = prompt("AddAccount?", "No\nYes", dmenu_wrapper.clone());
                 if areyousure == "" {
                     return;
                 } else if areyousure == "No" {
-                    prompt("AccountNotAdded.", "Ok");
+                    prompt("AccountNotAdded.", "Ok", dmenu_wrapper.clone());
                     continue;
                 }
                 /* reset pass for account */
                 store = add_pair(store, account, pass);
                 /* stores new store to file */
                 store_to_file(store, &key, &saved_pass, &filename);
-                prompt("AccountAdded.", "Ok");
+                prompt("AccountAdded.", "Ok", dmenu_wrapper.clone());
                 continue;
             },
             "Change" => {
@@ -417,33 +430,33 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}", &keys));
+                        let account = prompt("Account:", &format!("..\n{}", &keys), dmenu_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
                             continue;
                         }
                         /* get password of given account */
-                        let pass = prompt("NewPass:", "");
+                        let pass = prompt("NewPass:", "", dmenu_wrapper.clone());
                         if pass == "" {
                             return;
                         }
-                        let areyousure = prompt("AreYouSure???", "No\nYes");
+                        let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
                         if areyousure == "" {
                             return;
                         } else if areyousure == "No" {
-                            prompt("PasswordUnchanged!", "Ok");
+                            prompt("PasswordUnchanged!", "Ok", dmenu_wrapper.clone());
                             continue;
                         }
                         /* reset pass for account */
                         store = change_pair(store, account, pass);
                         /* stores new store to file */
                         store_to_file(store, &key, &saved_pass, &filename);
-                        prompt("PasswordChanged!", "Ok");
+                        prompt("PasswordChanged!", "Ok", dmenu_wrapper.clone());
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok");
+                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
                         continue;
                     }
                 }
@@ -456,48 +469,48 @@ fn main() {
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}",&keys));
+                        let account = prompt("Account:", &format!("..\n{}",&keys), dmenu_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
                             continue;
                         }
-                        let areyousure = prompt("AreYouSure???", "No\nYes");
+                        let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
                         if areyousure == "" {
                             return;
                         }
                         if areyousure == "No" {
-                            prompt("PasswordNotDeleted!", "Ok");
+                            prompt("PasswordNotDeleted!", "Ok", dmenu_wrapper.clone());
                             continue;
                         }
                         /* reset pass for account */
                         store = delete_pair(store, account);
                         /* stores new store to file */
                         store_to_file(store, &key, &saved_pass, &filename);
-                        prompt("PasswordDeleted!", "Ok");
+                        prompt("PasswordDeleted!", "Ok", dmenu_wrapper.clone());
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok");
+                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
                         continue;
                     }
                 }
             },
             "Change Master Password" => {
                 let (store, _) = open_and_read(&key, &filename);
-                key = prompt("NewMasterPass:", "");
+                key = prompt("NewMasterPass:", "", dmenu_wrapper.clone());
                 if key == "" {
                     return;
                 }
-                let areyousure = prompt("AreYouSure???", "No\nYes");
+                let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
                 if areyousure == "No" {
-                    prompt("PasswordUnchanged!", "Ok");
+                    prompt("PasswordUnchanged!", "Ok", dmenu_wrapper.clone());
                     continue;
                 }
 
                 let saved_pass = hash256(&key);
                 store_to_file(store, &key, &saved_pass, &filename);
-                prompt("PasswordChanged!", "Ok");
+                prompt("PasswordChanged!", "Ok", dmenu_wrapper.clone());
                 return;
             },
             _ => {
