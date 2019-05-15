@@ -222,7 +222,7 @@ fn change_pair(input: Option<Vec<Store>>, key: String, val: String) -> Option<Ve
     }
 }
 
-fn open_and_read(key: &str, filename: &str) -> (Option<Vec<Store>>, String) {
+fn open_and_read(key: &str, filename: &str, rofi_wrapper: Option<String>) -> (Option<Vec<Store>>, String) {
     let mut input_buffer: Vec<u8>;
     if Path::new(&filename).exists() {
         input_buffer = read_from_file(&filename).unwrap();
@@ -234,7 +234,7 @@ fn open_and_read(key: &str, filename: &str) -> (Option<Vec<Store>>, String) {
     let (store, saved_pass) = vec_u8_to_vec_store(original_input.clone());
     let sha_key = hash256(&key);
     if sha_key != saved_pass {
-        panic!("Bad password!!!");
+        prompt("Bad Password!", "Exit", rofi_wrapper.clone());
     }
     (store, saved_pass)
 }
@@ -288,14 +288,10 @@ fn get_pass(input: Option<Vec<Store>>, k: String) -> String {
     }
 }
 
-fn prompt(prompt: &str, input: &str, dmenu_wrapper: Option<String>) -> String {
-    let wrapper = match dmenu_wrapper {
-        Some(d_wrapper) => format!("sh {}", d_wrapper),
-        None => "/usr/bin/dmenu".to_string()
-    };
+fn prompt(prompt: &str, input: &str, rofi_wrapper: Option<String>) -> String {
     let output = Command::new("sh")
         .arg("-c")
-        .arg(format!("echo -e '{}' | {} -p '{}'", input, wrapper, prompt))
+        .arg(format!("echo -e '{}' | {} -p '{}'", input, rofi_wrapper.unwrap(), prompt))
         .output()
         .expect("failed to execute process");
     let mut result: String = str::from_utf8(&output.stdout).unwrap().to_string();
@@ -321,41 +317,35 @@ fn main() {
 
     /* check number of arguments */
     if args.len() != 2 && args.len() != 3  {
-        println!("\nUsage: ./password-manager <filename> [<dmenu-wrapper>]\n\n\taction: [ select | add | change | delete | purge file | change master password ]\n");
+        println!("\nUsage: ./password-manager <filename>\n\n\taction: [ select | add | change | delete | purge file | change master password ]\n");
         return;
     }
 
     /* grab the filename */
     let filename: String = args[1].clone();
 
-    let dmenu_wrapper: Option<String>;
-
-    if args.len() < 3 {
-        dmenu_wrapper = None;
-    } else {
-        dmenu_wrapper = Some(args[2].clone());
-    }
+    let rofi_wrapper = Some("/usr/bin/rofi -dmenu -fullscreen -i".to_string());
+    let rofi_password_wrapper = Some("/usr/bin/rofi -dmenu -password -fullscreen".to_string());
 
     /* prompt for master password, then the action */
-    let mut key: String = prompt("MasterPass:", "", dmenu_wrapper.clone());
-
+    let mut key: String = prompt("Master Password", "", rofi_password_wrapper.clone());
     if key == "" {
         return;
     }
     let mut action: String = String::new();
 
     while action != "Exit" {
-                action = prompt("Action:", "Select\nAdd\nChange\nDelete\nPurge File\nChange Master Password\nExit", dmenu_wrapper.clone());
+                action = prompt("Action", "Select\nAdd\nChange\nDelete\nPurge File\nChange Master Password\nExit", rofi_wrapper.clone());
         if action == "" {
             return;
         }
         match &action[..] {
             "Purge File" => {
-                let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
+                let areyousure = prompt("Are you sure you would like to exit?", "No\nYes", rofi_wrapper.clone());
                 if areyousure == "" {
                     return;
                 } else if areyousure == "No" {
-                    prompt("FileNotPurged.", "Ok", dmenu_wrapper.clone());
+                    prompt("File not purged", "Ok", rofi_wrapper.clone());
                     continue;
                 }
                 /* gets random vector of bytes of length FILESIZE */
@@ -365,18 +355,18 @@ fn main() {
                 /* writes buf to file */
                 buf = store_string(key.as_bytes(), reset_input.as_bytes(), buf);
                 write_to_file(&filename, buf).unwrap();
-                prompt("FilePurged.", "Ok", dmenu_wrapper.clone());
+                prompt("File purged.", "Ok", rofi_wrapper.clone());
                 return;
             },
             "Select" => {
                 /* get store */
-                let (store, _) = open_and_read(&key, &filename);
+                let (store, _) = open_and_read(&key, &filename, rofi_wrapper.clone());
                 /* grab accounts from store */
                 let accts = keys_to_string(store.clone());
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}", keys), dmenu_wrapper.clone());
+                        let account = prompt("Account", &format!("..\n{}", keys), rofi_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
@@ -390,127 +380,127 @@ fn main() {
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
+                        prompt("No accounts found", "Ok", rofi_wrapper.clone());
                         continue;
                     }
                 }
             },
             "Add" => {
                 /* get store */
-                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                let (mut store, saved_pass) = open_and_read(&key, &filename, rofi_wrapper.clone());
                 /* prompt for which account to use */
-                let account = prompt("NewAccount:", "", dmenu_wrapper.clone());
+                let account = prompt("New account name", "", rofi_wrapper.clone());
                 if account == "" {
                     continue;
                 }
                 /* get password of given account */
-                let pass = prompt("NewPass:", "", dmenu_wrapper.clone());
+                let pass = prompt(&format!("New password for account '{}'", account), "", rofi_password_wrapper.clone());
                 if pass == "" {
                     return;
                 }
-                let areyousure = prompt("AddAccount?", "No\nYes", dmenu_wrapper.clone());
+                let areyousure = prompt(&format!("Add account '{}'?", account), "No\nYes", rofi_wrapper.clone());
                 if areyousure == "" {
                     return;
                 } else if areyousure == "No" {
-                    prompt("AccountNotAdded.", "Ok", dmenu_wrapper.clone());
+                    prompt("Account not added", "Ok", rofi_wrapper.clone());
                     continue;
                 }
                 /* reset pass for account */
                 store = add_pair(store, account, pass);
                 /* stores new store to file */
                 store_to_file(store, &key, &saved_pass, &filename);
-                prompt("AccountAdded.", "Ok", dmenu_wrapper.clone());
+                prompt("Account added", "Ok", rofi_wrapper.clone());
                 continue;
             },
             "Change" => {
                 /* get store */
-                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                let (mut store, saved_pass) = open_and_read(&key, &filename, rofi_wrapper.clone());
                 /* grab accounts from store */
                 let accts = keys_to_string(store.clone());
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}", &keys), dmenu_wrapper.clone());
+                        let account = prompt("Account", &format!("..\n{}", &keys), rofi_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
                             continue;
                         }
                         /* get password of given account */
-                        let pass = prompt("NewPass:", "", dmenu_wrapper.clone());
+                        let pass = prompt(&format!("New password for account '{}'", account), "", rofi_password_wrapper.clone());
                         if pass == "" {
                             return;
                         }
-                        let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
+                        let areyousure = prompt(&format!("Change password for account '{}'?", account), "No\nYes", rofi_wrapper.clone());
                         if areyousure == "" {
                             return;
                         } else if areyousure == "No" {
-                            prompt("PasswordUnchanged!", "Ok", dmenu_wrapper.clone());
+                            prompt("Password unchanged", "Ok", rofi_wrapper.clone());
                             continue;
                         }
                         /* reset pass for account */
-                        store = change_pair(store, account, pass);
+                        store = change_pair(store, account.clone(), pass);
                         /* stores new store to file */
                         store_to_file(store, &key, &saved_pass, &filename);
-                        prompt("PasswordChanged!", "Ok", dmenu_wrapper.clone());
+                        prompt(&format!("Password for account '{}' changed", account), "Ok", rofi_wrapper.clone());
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
+                        prompt("No accounts found", "Ok", rofi_wrapper.clone());
                         continue;
                     }
                 }
             },
             "Delete" => {
                 /* get store */
-                let (mut store, saved_pass) = open_and_read(&key, &filename);
+                let (mut store, saved_pass) = open_and_read(&key, &filename, rofi_wrapper.clone());
                 /* grab accounts from store */
                 let accts = keys_to_string(store.clone());
                 match accts {
                     Some(keys) => {
                         /* prompt for which account to use */
-                        let account = prompt("Account:", &format!("..\n{}",&keys), dmenu_wrapper.clone());
+                        let account = prompt("Account", &format!("..\n{}",&keys), rofi_wrapper.clone());
                         if account == "" {
                             return;
                         } else if account == ".." {
                             continue;
                         }
-                        let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
+                        let areyousure = prompt(&format!("Delete account '{}'?", account), "No\nYes", rofi_wrapper.clone());
                         if areyousure == "" {
                             return;
                         }
                         if areyousure == "No" {
-                            prompt("PasswordNotDeleted!", "Ok", dmenu_wrapper.clone());
+                            prompt("Account not deleted", "Ok", rofi_wrapper.clone());
                             continue;
                         }
                         /* reset pass for account */
-                        store = delete_pair(store, account);
+                        store = delete_pair(store, account.clone());
                         /* stores new store to file */
                         store_to_file(store, &key, &saved_pass, &filename);
-                        prompt("PasswordDeleted!", "Ok", dmenu_wrapper.clone());
+                        prompt(&format!("Account '{}' deleted", account), "Ok", rofi_wrapper.clone());
                         continue;
                     },
                     None => {
-                        prompt("NoAccountsFound!", "Ok", dmenu_wrapper.clone());
+                        prompt("No accounts found", "Ok", rofi_wrapper.clone());
                         continue;
                     }
                 }
             },
             "Change Master Password" => {
-                let (store, _) = open_and_read(&key, &filename);
-                key = prompt("NewMasterPass:", "", dmenu_wrapper.clone());
+                let (store, _) = open_and_read(&key, &filename, rofi_wrapper.clone());
+                key = prompt("New master password", "", rofi_password_wrapper.clone());
                 if key == "" {
                     return;
                 }
-                let areyousure = prompt("AreYouSure???", "No\nYes", dmenu_wrapper.clone());
+                let areyousure = prompt("Are you sure you would like to change your master password?", "No\nYes", rofi_wrapper.clone());
                 if areyousure == "No" {
-                    prompt("PasswordUnchanged!", "Ok", dmenu_wrapper.clone());
+                    prompt("Master password unchanged", "Ok", rofi_wrapper.clone());
                     continue;
                 }
 
                 let saved_pass = hash256(&key);
                 store_to_file(store, &key, &saved_pass, &filename);
-                prompt("PasswordChanged!", "Ok", dmenu_wrapper.clone());
+                prompt("Master password updated", "Ok", rofi_wrapper.clone());
                 return;
             },
             _ => {
