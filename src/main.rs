@@ -341,7 +341,7 @@ fn main() {
         }
         match &action[..] {
             "Purge File" => {
-                let areyousure = prompt("Are you sure you would like to exit?", "No\nYes", rofi_wrapper.clone());
+                let areyousure = prompt("Are you sure you would like to purge the file?", "No\nYes", rofi_wrapper.clone());
                 if areyousure == "" {
                     return;
                 } else if areyousure == "No" {
