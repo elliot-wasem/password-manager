@@ -1,17 +1,17 @@
 # password-manager
 
-This is a dmenu-driven password manager that will let you store and retrieve passwords. It will copy the password for your selected account to your clipboard. I make no guarantees about being cryptographically secure. I believe it is secure enough, but I'm waiting on expert opinion still.
+This is a rofi-driven password manager that will let you store and retrieve passwords. It will copy the password for your selected account to your clipboard. I make no guarantees about being cryptographically secure. I believe it is secure enough, but I'm waiting on expert opinion still.
 
 ## Setup
 
-As it is dmenu-driven, it depends on dmenu! Surprise!!! It also depends on xclip.
+As it is rofi-driven, it depends on rofi! Surprise!!! It also depends on xclip.
 
-Also, I've only tested it on Arch Linux. If you do not provide a script (as explained below), it defaults to `/usr/bin/dmenu`.
+Also, I've only tested it on Arch Linux. If you do not provide a script (as explained below), it defaults to `/usr/bin/rofi`.
 
-This program requires at least the password file you wish to use/generate as an argument, with an optional argument pointing to a dmenu-wrapper script. Please make it a shell script, I'm not sure this program could handle whatever other weird scripts you have cooked up and I don't feel like testing it as such. Please note, if your dmenu-wrapper script has a prompt built into it, my program will likely override that prompt.
+This program requires at least the password file you wish to use/generate as an argument, with an optional argument pointing to a rofi-wrapper script. Please make it a shell script, I'm not sure this program could handle whatever other weird scripts you have cooked up and I don't feel like testing it as such. Please note, if your rofi-wrapper script has a prompt built into it, my program will likely override that prompt.
 
 ```
-Usage: ./password-manager <password file> [some-dmenu-wrapper.sh]
+Usage: ./password-manager <password file> [some-rofi-wrapper.sh]
 ```
 
 You will be greeted initially with a prompt to enter master password. If the file does not yet exist, this will become your master password!
